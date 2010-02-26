@@ -1,0 +1,30 @@
+# $Id:$
+
+PortSystem 1.0
+
+name                    NAME
+version                 VERS
+categories              math science
+platforms               darwin
+maintainers             nomaintainer
+description             DESC
+long_description        ${description}
+
+homepage                http://octave.sf.net
+master_sites            sourceforge:octave
+
+distname		DSTN
+
+CHKS
+
+depends_lib-append		port:octave DEPS
+
+post-destroot { 
+	move ${destroot}${prefix}/share/octave/octave_packages ${destroot}${prefix}/share/octave/octave_packages_${name} }
+post-activate { 
+	system "octave --eval \"pkg rebuild\"" }
+	livecheck.check regex 
+ 
+livecheck.check regex
+livecheck.url   http://octave.sourceforge.net/LVCK/index.html
+livecheck.regex <tr><td>Package Version:</td><td>(\\d+(\\.\\d+)*)</td></tr>
