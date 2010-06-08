@@ -1,0 +1,34 @@
+# $Id: Portfile 31212 2007-11-18 13:46:26Z mas@macports.org $
+
+PortSystem 1.0
+name                g-wrap-devel
+version             1.9.13
+revision            0
+categories          lang
+maintainers         nomaintainer
+platforms           darwin
+description         autogenerate scheme bindings for C functions, structures and enums
+long_description    ${description}
+
+patchfiles          patch-ltmain.sh.diff
+
+homepage            http://www.nongnu.org/g-wrap
+master_sites        http://savannah.nongnu.org/download/g-wrap/
+distname            g-wrap-${version}
+checksums           md5 bf29b8b563cc27d9f7fd90a6243653aa
+depends_lib         port:slib-guile \
+                    port:glib2 \
+                    port:libffi
+
+post-destroot {
+    xinstall -d ${destroot}${prefix}/share/info
+    foreach info [glob ${destroot}${prefix}/info/*] {
+        file rename $info ${destroot}${prefix}/share/info/
+    }
+    delete ${destroot}${prefix}/info
+    delete ${destroot}${prefix}/share/man
+}
+
+checksums           md5     5952a389fd00f123dfb86d269a1d6d67 \
+                    sha1    f71d3324574f3213d53240b4d831c864b592db49 \
+                    rmd160  4ae90250341b6cdbd7456cefc3a3f658763925ed

@@ -1,0 +1,11 @@
+--- ltmain.sh.orig	2009-10-23 15:54:05.000000000 +0200
++++ ltmain.sh	2010-05-01 18:06:56.000000000 +0200
+@@ -5567,7 +5567,7 @@
+ 	  *)
+ 	    if test "$installed" = no; then
+ 	      notinst_deplibs="$notinst_deplibs $lib"
+-	      need_relink=yes
++	      need_relink=no
+ 	    fi
+ 	    ;;
+ 	  esac
