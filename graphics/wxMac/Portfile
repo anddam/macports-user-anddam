@@ -24,4 +24,5 @@ checksums           md5     58e51d9ec844185e60c94b6e40cf8c6e \
                     rmd160  8e7e481922badfcae94c7720ac6694c2135ca482
 
 set worksrcdir	    ${distname}-${version}
-#extract.only	    ${distname}-${version}${extract.suffix}
+configure.universal_archs i386 ppc  
+
