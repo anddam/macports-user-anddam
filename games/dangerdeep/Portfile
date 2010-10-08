@@ -1,0 +1,53 @@
+# -*- coding: utf-8; mode: tcl; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- vim:fenc=utf-8:ft=tcl:et:sw=4:ts=4:sts=4
+# $Id$
+
+PortSystem              1.0
+
+name                    dangerdeep
+version                 0.3.0
+maintainers             and.damore openmaintainer 
+categories              games
+platforms               darwin
+homepage                http://dangerdeep.sourceforge.net
+description             Opensource World War II german submarine simulator
+
+long_description        Danger from the Deep (known as dangerdeep or DftD) is \
+                        a free (as in free speech), Open Source World War II german \
+                        submarine simulator. The program and source code is available \
+                        under the GPL license and most of the artwork/data is released \
+                        under a Creative Commons license \
+                        (Attribution/NonCommercial/Non-Derivative works).                        
+
+use_parallel_build      no
+#universal_variant       no
+distfiles               ${distname}${extract.suffix} \
+                        ${name}-data-${version}.zip
+                        
+master_sites            sourceforge
+
+checksums               dangerdeep-0.3.0.tar.gz \
+                        md5     8a1d19326a9a0bd8bb91a652bfa51bd9 \
+                        sha1    b3bb8a89b6016a26d0ce6c00af4ed70b33f549e2 \
+                        rmd160  f4959c78592700542514b31beb5e641cc43e10a8 \
+                        dangerdeep-data-0.3.0.zip \
+                        md5     b9a2f2ff756cd7715a3b58de7504c1d0 \
+                        sha1    5415256683fc5dc432ce36dccd17727eab3f1153 \
+                        rmd160  b37fc081824089db6eda3491288b83f4bd0f3dd7
+
+depends_build           port:scons
+
+depends_lib             port:mesa \
+                        port:libsdl_image \
+                        port:fftw-3
+
+#patchfiles              patch-SConstruct.diff \
+  
+post-patch {
+    reinplace "s|@@PREFIX@@|${prefix}|g" ${worksrcpath}/SConstruct
+}
+
+use_configure           no
+
+build.cmd               scons
+build.target
+build.post_args-append installbindir=${prefix}/bin datadir=${prefix}/share/dangerdeep/data
