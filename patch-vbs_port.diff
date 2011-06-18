@@ -1,0 +1,31 @@
+Index: Portfile
+===================================================================
+--- Portfile	(revision 79544)
++++ Portfile	(working copy)
+@@ -13,15 +13,22 @@
+     implementation of a Verilog simulator.  VBS tries to implement all \
+     of the Verilog behavioral constructs that are synthesizable, but \
+     still allow complex test vectors for simulation.
+-homepage         http://www.flex.com/~jching/
++homepage         http://ftp.sunet.se/geda/tools/vbs/index.html
+ platforms        darwin
+-master_sites     ${homepage}
+-checksums        md5 07619d3dbfc030639d8ed1271f792d62
++master_sites     http://www.geda.seul.org/dist
++checksums           md5     07619d3dbfc030639d8ed1271f792d62 \
++                    sha1    fd39003417230d8d4cb12b8ff1e005006b6c8946 \
++                    rmd160  a008225ab72b92f922b2f769bd13beca0b82530c
+ worksrcdir       ${distname}/src
+ 
+-patchfiles       patch-Makefile.in
++patchfiles       patch-Makefile.in patch-common_logic_h.diff patch-common_bvector_cc.diff
+ configure.args   --disable-debug
+ build.target     ${name}
+ test.run         yes
+ test.target      test-all testv-all
+ destroot.destdir prefix=${destroot}${prefix}
++use_parallel_build  no
++post-extract {
++    system "find ${workpath}/${distname} -type d -exec chmod go+rwx {} \\;"
++    system "find ${workpath}/${distname} -type f -exec chmod go+rw {} \\;"
++}
