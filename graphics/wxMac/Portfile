@@ -1,6 +1,6 @@
 # $Id$
 PortSystem          1.0
-#PortGroup           archcheck 1.0
+PortGroup           archcheck 1.0
 name			    wxMac
 conflicts		    wxgtk wxWidgets-python wxWidgets
 version			    2.8.11
@@ -24,5 +24,5 @@ checksums           md5     58e51d9ec844185e60c94b6e40cf8c6e \
                     rmd160  8e7e481922badfcae94c7720ac6694c2135ca482
 
 set worksrcdir	    ${distname}-${version}
-configure.universal_archs i386 ppc  
+configure.build_arch i386 
 
