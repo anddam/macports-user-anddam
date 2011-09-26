@@ -102,6 +102,21 @@ Index: files/patch-Nukefile.diff
 -            ((@frameworks map: (do (framework) " -framework #{framework}")) join)
 -            ((@libs map: (do (lib) " -l#{lib}")) join)
 -            (ifDarwin
+Index: files/patch-tools_nuke.diff
+===================================================================
+--- files/patch-tools_nuke.diff	(revision 0)
++++ files/patch-tools_nuke.diff	(revision 0)
+@@ -0,0 +1,10 @@
++--- tools/nuke.orig	2011-09-26 23:13:08.000000000 +0200
+++++ tools/nuke	2011-09-26 23:13:45.000000000 +0200
++@@ -568,6 +568,7 @@
++      
++      ;; framework architecture-specific executable
++      (set @framework_executables (NSMutableArray array))
+++     (set @framework_install_path "#{FRAMEWORK_ROOT}")     
++      (@arch each:
++             (do (architecture)
++                 (set framework_executable "build/#{architecture}/framework-#{@framework}")
 Index: Portfile
 ===================================================================
 --- Portfile	(revision 84413)
@@ -116,7 +131,7 @@ Index: Portfile
  categories          devel
  maintainers         nomaintainer
  license             Apache-2.0
-@@ -19,15 +20,19 @@
+@@ -19,15 +20,21 @@
      are implemented in Objective-C or Nu.
  homepage            http://programming.nu/
  platforms           darwin
@@ -131,11 +146,13 @@ Index: Portfile
  
 -checksums           sha1    02e0df424f18a6c6c3c3221699014018cabcd8bc \
 -                    rmd160  31aa22c7a4dddd1135a55f6bdaf27b1f485ded43
-+patch {
-+    reinplace {s|clang|llvm-gcc-4.2|} ${worksrcpath}/Makefile
-+    reinplace {s|"i386"||}            ${worksrcpath}/Nukefile
-+    reinplace "s|{@destdir}/Library|{@destdir}${prefix}/Library|" ${worksrcpath}/Nukefile
-+    
++patchfiles          patch-tools_nuke.diff
++post-patch {
++    #reinplace {s|clang|llvm-gcc-4.2|} ${worksrcpath}/Makefile
++    reinplace "s|\$(DEVROOT)/usr/bin/clang|${configure.cc}|"        ${worksrcpath}/Makefile
++    reinplace {s|"i386"||}                                          ${worksrcpath}/Nukefile
++    reinplace "s|{@destdir}/Library|{@destdir}${prefix}/Library|"   ${worksrcpath}/Nukefile
++    reinplace "s|/Library/Frameworks|${prefix}/Library/Frameworks|" ${worksrcpath}/tools/nuke
 +}
  
 -patchfiles          patch-Makefile.diff patch-Nukefile.diff
@@ -143,7 +160,7 @@ Index: Portfile
  depends_build       port:pkgconfig
  
  depends_lib         port:libffi port:pcre port:libedit
-@@ -42,20 +47,6 @@
+@@ -42,20 +49,6 @@
  livecheck.url       http://programming.nu/downloads
  livecheck.regex     {Nu-([\d.]+).tgz}
  
