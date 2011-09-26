@@ -1,0 +1,166 @@
+Index: files/patch-Makefile.diff
+===================================================================
+--- files/patch-Makefile.diff	(revision 84413)
++++ files/patch-Makefile.diff	(working copy)
+@@ -1,30 +0,0 @@
+---- Makefile.orig	2009-11-17 19:12:00.000000000 -0600
+-+++ Makefile	2011-02-11 15:06:37.000000000 -0600
+-@@ -9,23 +9,16 @@
+- PREFIX ?= /usr/local
+- 
+- ifeq ($(SYSTEM), Darwin)
+--	ifeq ($(shell test -e /usr/lib/libffi.dylib && echo yes), yes)
+--		# Use the libffi that ships with OS X.
+--		FFI_LIB = -L/usr/lib -lffi
+--		FFI_INCLUDE = -I/usr/include/ffi
+-+	ifeq ($(shell test -e /Developer/SDKs/MacOSX10.5.sdk && echo yes), yes)
+- 		LEOPARD_CFLAGS = -DLEOPARD_OBJC2
+- 	else
+--		# Use the libffi that is distributed with Nu.
+--		FFI_LIB = -L./libffi -lffi
+--		FFI_INCLUDE = -I./libffi/include
+- 		LEOPARD_CFLAGS =
+- 	endif
+--
+--else # Linux
+--	FFI_LIB=-lffi
+--	FFI_INCLUDE=
+- endif
+- 
+-+FFI_LIB := $(shell pkg-config libffi --libs)
+-+FFI_INCLUDE := $(shell pkg-config libffi --cflags)
+-+
+- INCLUDES = $(FFI_INCLUDE) -I./include
+- 
+- ifeq ($(SYSTEM), Darwin)
+Index: files/patch-Nukefile.diff
+===================================================================
+--- files/patch-Nukefile.diff	(revision 84413)
++++ files/patch-Nukefile.diff	(working copy)
+@@ -1,64 +0,0 @@
+---- Nukefile.orig	2011-02-11 14:53:39.000000000 -0600
+-+++ Nukefile	2011-02-11 15:04:28.000000000 -0600
+-@@ -52,14 +52,6 @@
+- (if (NSFileManager directoryExistsNamed:"#{@prefix}/include") (@inc_dirs addObject:"#{@prefix}/include"))
+- (if (NSFileManager directoryExistsNamed:"#{@prefix}/lib") (@lib_dirs addObject:"#{@prefix}/lib"))
+- 
+--(ifDarwin
+--         (then (if (NSFileManager fileExistsNamed:"/usr/lib/libffi.dylib")
+--                   (then ;; Use the libffi that ships with OS X.
+--                         (@inc_dirs addObject:"/usr/include/ffi"))
+--                   (else ;; Use the libffi that is distributed with Nu.
+--                         (@inc_dirs addObject:"./libffi/include")
+--                         (@lib_dirs addObject:"./libffi")))))
+--
+- (set @pcre_prefix "")
+- (let ((pcre_config ((NSString stringWithShellCommand:"which pcre-config 2>/dev/null") chomp)))
+-      (if pcre_config
+-@@ -78,18 +70,11 @@
+- (set @dylib "libNu")
+- 
+- ;; build configuration
+--(set @cc "gcc")
+--(set @leopard "")
+--(set @sdk
+--     (cond ((NSFileManager directoryExistsNamed:"/Developer/SDKs/MacOSX10.6.sdk")
+--            (set @leopard "-DLEOPARD_OBJC2 -D__OBJC2__")
+--            ("-isysroot /Developer/SDKs/MacOSX10.6.sdk"))
+--           ((NSFileManager directoryExistsNamed:"/Developer/SDKs/MacOSX10.5.sdk")
+--            (set @leopard "-DLEOPARD_OBJC2 -D__OBJC2__")
+--            ("-isysroot /Developer/SDKs/MacOSX10.5.sdk"))
+--           ((NSFileManager directoryExistsNamed:"/Developer/SDKs/MacOSX10.4u.sdk")
+--            ("-isysroot /Developer/SDKs/MacOSX10.4u.sdk"))
+--           (else "")))
+-+(set @cc "@CC@")
+-+(if (NSFileManager directoryExistsNamed:"/Developer/SDKs/MacOSX10.5.sdk")
+-+    (then (set @leopard "-DLEOPARD_OBJC2 -D__OBJC2__"))
+-+    (else (set @leopard "")))
+-+(set @sdk "@SDKROOT@")
+- 
+- (ifDarwin
+-          (then (set @cflags "-Wall -g -O2 -DDARWIN -DMACOSX #{@sdk} #{@leopard} -std=gnu99")
+-@@ -99,7 +84,7 @@
+-                (set @mflags ((NSString stringWithShellCommand:"gnustep-config --objc-flags") chomp))))
+- 
+- (ifDarwin
+--         (then (set @arch '("ppc" "i386")))) ;; build a universal binary
+-+         (then (set @arch '("@ARCHS@")))) ;; build a universal binary
+- ;; or set this to just build for your chosen platform
+- ;;(set @arch '("i386"))
+- 
+-@@ -107,12 +92,7 @@
+-      ((@inc_dirs map: (do (inc) " -I#{inc}")) join))
+- (set @ldflags
+-      ((list
+--           (cond  ;; statically link in pcre since most people won't have it..
+--(t nil)
+--                  ((NSFileManager fileExistsNamed:"#{@pcre_prefix}/lib/libpcre.a") "#{@pcre_prefix}/lib/libpcre.a")
+--                  ((NSFileManager fileExistsNamed:"/usr/lib/libpcre.a") "/usr/lib/libpcre.a")
+--                  ((NSFileManager fileExistsNamed:"#{@prefix}/lib/libpcre.a") "#{@prefix}/lib/libpcre.a")
+--                  (else (NSException raise:"NukeBuildError" format:"Can't find static pcre library (libpcre.a).")))
+-+           ("#{@pcre_prefix}/lib/libpcre.dylib")
+-            ((@frameworks map: (do (framework) " -framework #{framework}")) join)
+-            ((@libs map: (do (lib) " -l#{lib}")) join)
+-            (ifDarwin
+Index: Portfile
+===================================================================
+--- Portfile	(revision 84413)
++++ Portfile	(working copy)
+@@ -3,7 +3,8 @@
+ PortSystem 1.0
+ 
+ name                nu
+-version             0.4.0
++version             2.0.1
++set commit          a23f145df3a55c90205d66b5f69228dbca92ac99
+ categories          devel
+ maintainers         nomaintainer
+ license             Apache-2.0
+@@ -19,15 +20,19 @@
+     are implemented in Objective-C or Nu.
+ homepage            http://programming.nu/
+ platforms           darwin
+-master_sites        http://programming.nu/releases/
+-distname            Nu-${version}
+-extract.suffix      .tgz
++master_sites        https://nodeload.github.com/ksjogo/nu/tarball
++distfiles           ${commit}
++distname            ksjogo-${name}-a23f145
++checksums           rmd160  a339cd7cf72b865fab04ca09cb17d4a7f6426ca5 \
++                    sha256  526871eea14c2dd997d9a441a89a1be0b0aa8de64729a6207175d517546b564b
+ 
+-checksums           sha1    02e0df424f18a6c6c3c3221699014018cabcd8bc \
+-                    rmd160  31aa22c7a4dddd1135a55f6bdaf27b1f485ded43
++patch {
++    reinplace {s|clang|llvm-gcc-4.2|} ${worksrcpath}/Makefile
++    reinplace {s|"i386"||}            ${worksrcpath}/Nukefile
++    reinplace "s|{@destdir}/Library|{@destdir}${prefix}/Library|" ${worksrcpath}/Nukefile
++    
++}
+ 
+-patchfiles          patch-Makefile.diff patch-Nukefile.diff
+-
+ depends_build       port:pkgconfig
+ 
+ depends_lib         port:libffi port:pcre port:libedit
+@@ -42,20 +47,6 @@
+ livecheck.url       http://programming.nu/downloads
+ livecheck.regex     {Nu-([\d.]+).tgz}
+ 
+-post-patch {
+-    if {[variant_isset universal]} {
+-        set archs ${configure.universal_archs}
+-    } else {
+-        set archs ${configure.build_arch}
+-    }
+-    reinplace "s|@ARCHS@|[join ${archs} {" "}]|g" ${worksrcpath}/Nukefile
+-    reinplace "s|@CC@|${configure.cc}|g" ${worksrcpath}/Nukefile
+-    reinplace "s|@SDKROOT@|${configure.sdkroot}|g" ${worksrcpath}/Nukefile
+-    reinplace "s|/usr/local|${prefix}|g" \
+-        ${worksrcpath}/tools/nubile \
+-        ${worksrcpath}/examples/NuAnywhere/nu-anywhere
+-}
+-
+ pre-build {
+     system "cd ${worksrcpath} && make PREFIX=${prefix} CC=${configure.cc}"
+ }
