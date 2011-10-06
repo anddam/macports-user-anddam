@@ -1,0 +1,10 @@
+--- src/utility/iStrCmp.c.orig	2010-05-01 08:14:24.000000000 +0200
++++ src/utility/iStrCmp.c	2010-05-01 08:13:08.000000000 +0200
+@@ -17,6 +17,7 @@
+ //*****************************************************************************
+ 
+ #include "utility/iStrCmp.h"
++#include "../TypeDefs.hpp"
+ 
+ //*****************************************************************************
+ // Compare algorithm for sorting strings alpha/numerically.

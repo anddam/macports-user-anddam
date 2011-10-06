@@ -1,0 +1,67 @@
+# $Id$
+PortSystem          1.0
+
+name                gspiceui        
+version             0.9.99
+categories          cad science electronics
+maintainers         nomaintainer   
+license             GPL-2
+description         intuitive and user-friendly graphical interface to gsch2pcb
+long_description    xgsch2pcb provides an intuitive, user-friendly graphical interface to \
+                    the gsch2pcb command-line tool which is used to generate and update a \
+                    PCB layout. It works with schematics created by gschem, and layouts \
+                    created by pcb. xgsch2pcb also features a "template" functionality for \
+                    creating new projects.
+homepage            http://sourceforge.net/projects/gspiceui/
+platforms           darwin
+
+master_sites        sourceforge
+checksums           md5     a81db43df1bd0cc267179c2dad267506 \
+                    sha1    5d258093a3d3ea81be1fb2ab5dc13aa93164f90e \
+                    rmd160  5e8078ff3864a5ea0d5d811db5ad3bbbd296e5b3
+
+distname            ${name}-v${version}
+depends_build       bin:wx-config:wxWidgets
+
+patchfiles          patch-iStrCmp.diff \
+                    patch-src-Makefile.diff \
+                    patch-src-utility-ConvertType-cpp.diff
+
+use_configure       no
+
+post-patch {
+    reinplace "s|%%CXX_ARCHFLAGS%%|${configure.cxx_archflags}|" ${worksrcpath}/src/Makefile
+    reinplace "s|iStrCmp.c|iStrCmp.cpp|g" ${worksrcpath}/src/Makefile
+
+    move ${worksrcpath}/src/utility/iStrCmp.c ${worksrcpath}/src/utility/iStrCmp.cpp
+    move ${worksrcpath}/src/utility/iStrCmp.h ${worksrcpath}/src/utility/iStrCmp.hpp
+    
+    reinplace "s|iStrCmp.c|iStrCmp.cpp|g" ${worksrcpath}/src/Makefile.deps
+    reinplace "s|iStrCmp.h|iStrCmp.hpp|g" ${worksrcpath}/src/Makefile.deps
+    reinplace "s|iStrCmp.h|iStrCmp.hpp|g" ${worksrcpath}/src/netlist/Component.hpp
+    reinplace "s|iStrCmp.h|iStrCmp.hpp|g" ${worksrcpath}/src/netlist/NetList.hpp
+    reinplace "s|iStrCmp.h|iStrCmp.hpp|g" ${worksrcpath}/src/utility/iStrCmp.cpp
+
+    #patch hardcoded wx-config command
+    reinplace -E "s|(WXCFG = )(wx-config)|\\1${prefix}/bin/\\2|" ${worksrcpath}/src/Makefile
+    
+    set wxVersion [exec -ignorestderr /opt/local/bin/wx-config --release]
+    if { ${wxVersion} == "2.9" } {
+        #patch a wxWidgets issue in compatibility between 2.9 and 2.8
+        reinplace -E "s|(switch\\( )(osUnits.G)|\\1(wxChar)\\2|" ${worksrcpath}/src/utility/ChoUnits.cpp 
+        reinplace -E "s|(switch\\( )(os1.GetCh)|\\1(wxChar)\\2|" ${worksrcpath}/src/gnucap/commands/CmdGnuCapPR.cpp
+        reinplace -E "s|(switch\\( )(wxToupper)|\\1(wxChar)\\2|" ${worksrcpath}/src/gnucap/panels/PnlGnuCapDC.cpp
+        reinplace -E "s|(switch\\( )(os1.GetCh)|\\1(wxChar)\\2|" ${worksrcpath}/src/ngspice/commands/CmdNgSpicePR.cpp
+        reinplace -E "s|(switch\\( )(wxToupper)|\\1(wxChar)\\2|" ${worksrcpath}/src/ngspice/panels/PnlNgSpiceDC.cpp
+        #patch hardcoded wxWidgets version number
+        reinplace -E "s|(GSPICEUI_WXLIB = )2.8|\\1${wxVersion}|" ${worksrcpath}/src/Makefile  
+    }
+}
+
+#use_parallel_build  no
+
+build.args-append       CC=${configure.cc} \
+                        CXX=${configure.cxx} \
+                        CPP=${configure.cpp}
+
+destroot.destdir  INSTALLDIR=${destroot}${prefix}

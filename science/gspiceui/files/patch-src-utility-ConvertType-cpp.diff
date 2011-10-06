@@ -1,0 +1,14 @@
+--- src/utility/ConvertType.cpp.orig	2010-05-01 19:33:34.000000000 +0200
++++ src/utility/ConvertType.cpp	2010-05-01 19:32:59.000000000 +0200
+@@ -263,9 +263,9 @@
+   if( ! bParseFlt( dfNum, &fMan, &iExp ) ) return( FALSE );
+ 
+   // Round the mantissa based on the desired resolution
+-  fMan *= pow( 10.0, (float) m_iFltRes );
++  fMan *= pow( (float) 10.0, (float) m_iFltRes );
+   fMan = roundf( fMan );
+-  fMan /= pow( 10.0, (float) m_iFltRes );
++  fMan /= pow( (float) 10.0, (float) m_iFltRes );
+ 
+   // Scale the mantissa so that the exponent is a multiple of 3
+   while( iExp % 3 )
