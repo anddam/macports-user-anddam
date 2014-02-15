@@ -1,0 +1,77 @@
+--- src/main.h.orig	2014-02-15 08:19:57.000000000 +0100
++++ src/main.h	2014-02-15 08:20:42.000000000 +0100
+@@ -96,6 +96,7 @@
+ extern bool fBenchmark;
+ extern int nScriptCheckThreads;
+ extern bool fTxIndex;
++extern bool fAddrIndex;
+ extern unsigned int nCoinCacheSize;
+ 
+ // Settings
+@@ -248,8 +249,57 @@
+         CDiskBlockPos::SetNull();
+         nTxOffset = 0;
+     }
++    
++    friend bool operator==(const CDiskTxPos &a, const CDiskTxPos &b) {
++        return (a.nFile == b.nFile && a.nPos == b.nPos && a.nTxOffset == b.nTxOffset);
++    }
++
++    friend bool operator!=(const CDiskTxPos &a, const CDiskTxPos &b) {
++        return !(a == b);
++    }
++
++    friend bool operator<(const CDiskTxPos &a, const CDiskTxPos &b) {
++        return  (a.nFile < b.nFile || (
++                (a.nFile == b.nFile) && (a.nPos < b.nPos || (
++                                        (a.nPos == b.nPos) && (a.nTxOffset < b.nTxOffset)))));
++    }
+ };
+ 
++struct CExtDiskTxPos : public CDiskTxPos
++{
++    unsigned int nHeight;
++
++    IMPLEMENT_SERIALIZE(
++        READWRITE(*(CDiskTxPos*)this);
++        READWRITE(VARINT(nHeight));
++    )
++
++    CExtDiskTxPos(const CDiskTxPos &pos, int nHeightIn) : CDiskTxPos(pos), nHeight(nHeightIn) {
++    }
++
++    CExtDiskTxPos() {
++        SetNull();
++    }
++
++    void SetNull() {
++        CDiskTxPos::SetNull();
++        nHeight = 0;
++    }
++
++    friend bool operator==(const CExtDiskTxPos &a, const CExtDiskTxPos &b) {
++        return (a.nHeight == b.nHeight && a.nFile == b.nFile && a.nPos == b.nPos && a.nTxOffset == b.nTxOffset);
++    }
++ 
++    friend bool operator!=(const CExtDiskTxPos &a, const CExtDiskTxPos &b) {
++        return !(a == b);
++    }
++
++    friend bool operator<(const CExtDiskTxPos &a, const CExtDiskTxPos &b) {
++        if (a.nHeight < b.nHeight) return true;
++        if (a.nHeight > b.nHeight) return false;
++        return ((const CDiskTxPos)a < (const CDiskTxPos)b);
++    }
++};
+ 
+ /** An inpoint - a combination of a transaction and an index n into its vin */
+ class CInPoint
+@@ -264,6 +314,8 @@
+     bool IsNull() const { return (ptx == NULL && n == (unsigned int) -1); }
+ };
+ 
++bool ReadTransaction(CTransaction& tx, const CDiskTxPos &pos, uint256 &hashBlock);
++bool FindTransactionsByDestination(const CTxDestination &dest, std::set<CExtDiskTxPos> &setpos);
+ 
+ 
+ /** An outpoint - a combination of a transaction hash and an index n into its vout */

@@ -1,0 +1,411 @@
+diff --git a/src/bitcoinrpc.cpp b/src/bitcoinrpc.cpp
+index 11fac42..a542470 100644
+--- src/bitcoinrpc.cpp
++++ src/bitcoinrpc.cpp
+@@ -249,6 +249,7 @@ Value stop(const Array& params, bool fHelp)
+     { "importwallet",           &importwallet,           false,     false },
+     { "listunspent",            &listunspent,            false,     false },
+     { "getrawtransaction",      &getrawtransaction,      false,     false },
++    { "searchrawtransactions",  &searchrawtransactions,  false,     false },
+     { "createrawtransaction",   &createrawtransaction,   false,     false },
+     { "decoderawtransaction",   &decoderawtransaction,   false,     false },
+     { "signrawtransaction",     &signrawtransaction,     false,     false },
+@@ -1189,6 +1190,9 @@ Array RPCConvertValues(const std::string &strMethod, const std::vector<std::stri
+     if (strMethod == "listunspent"            && n > 2) ConvertTo<Array>(params[2]);
+     if (strMethod == "getblock"               && n > 1) ConvertTo<bool>(params[1]);
+     if (strMethod == "getrawtransaction"      && n > 1) ConvertTo<boost::int64_t>(params[1]);
++    if (strMethod == "searchrawtransactions"  && n > 1) ConvertTo<boost::int64_t>(params[1]);
++    if (strMethod == "searchrawtransactions"  && n > 2) ConvertTo<boost::int64_t>(params[2]);
++    if (strMethod == "searchrawtransactions"  && n > 3) ConvertTo<boost::int64_t>(params[3]);
+     if (strMethod == "createrawtransaction"   && n > 0) ConvertTo<Array>(params[0]);
+     if (strMethod == "createrawtransaction"   && n > 1) ConvertTo<Object>(params[1]);
+     if (strMethod == "signrawtransaction"     && n > 1) ConvertTo<Array>(params[1], true);
+diff --git a/src/bitcoinrpc.h b/src/bitcoinrpc.h
+index 4d5599b..443bf98 100644
+--- src/bitcoinrpc.h
++++ src/bitcoinrpc.h
+@@ -192,6 +192,7 @@ class CRPCTable
+ extern json_spirit::Value getinfo(const json_spirit::Array& params, bool fHelp);
+ 
+ extern json_spirit::Value getrawtransaction(const json_spirit::Array& params, bool fHelp); // in rcprawtransaction.cpp
++extern json_spirit::Value searchrawtransactions(const json_spirit::Array& params, bool fHelp);
+ extern json_spirit::Value listunspent(const json_spirit::Array& params, bool fHelp);
+ extern json_spirit::Value lockunspent(const json_spirit::Array& params, bool fHelp);
+ extern json_spirit::Value listlockunspent(const json_spirit::Array& params, bool fHelp);
+diff --git a/src/init.cpp b/src/init.cpp
+index f6b2c91..a8a2379 100644
+--- src/init.cpp
++++ src/init.cpp
+@@ -710,7 +710,7 @@ bool AppInit2(boost::thread_group& threadGroup)
+     if (nTotalCache < (1 << 22))
+         nTotalCache = (1 << 22); // total cache cannot be less than 4 MiB
+     size_t nBlockTreeDBCache = nTotalCache / 8;
+-    if (nBlockTreeDBCache > (1 << 21) && !GetBoolArg("-txindex", false))
++    if (nBlockTreeDBCache > (1 << 21) && !GetBoolArg("-txindex", false) && !GetBoolArg("-addrindex", false))
+         nBlockTreeDBCache = (1 << 21); // block tree db cache shouldn't be larger than 2 MiB
+     nTotalCache -= nBlockTreeDBCache;
+     size_t nCoinDBCache = nTotalCache / 2; // use half of the remaining cache for coindb cache
+@@ -761,6 +761,12 @@ bool AppInit2(boost::thread_group& threadGroup)
+                     break;
+                 }
+ 
++                // Check for changed -addrindex state
++                if (fAddrIndex != GetBoolArg("-addrindex", false)) {
++                    strLoadError = _("You need to rebuild the database using -reindex to change -addrindex");
++                    break;
++                }
++
+                 uiInterface.InitMessage(_("Verifying blocks..."));
+                 if (!VerifyDB(GetArg("-checklevel", 3),
+                               GetArg( "-checkblocks", 288))) {
+diff --git a/src/leveldb.cpp b/src/leveldb.cpp
+index e66f851..ae8d00d 100644
+--- src/leveldb.cpp
++++ src/leveldb.cpp
+@@ -34,6 +34,13 @@ static leveldb::Options GetOptions(size_t nCacheSize) {
+     return options;
+ }
+ 
++CLevelDBIterator::~CLevelDBIterator() { delete piter; }
++bool CLevelDBIterator::Valid() { return piter->Valid(); }
++void CLevelDBIterator::SeekToFirst() { piter->SeekToFirst(); }
++void CLevelDBIterator::SeekToLast() { piter->SeekToLast(); }
++void CLevelDBIterator::Next() { piter->Next(); }
++void CLevelDBIterator::Prev() { piter->Prev(); }
++
+ CLevelDB::CLevelDB(const boost::filesystem::path &path, size_t nCacheSize, bool fMemory, bool fWipe) {
+     penv = NULL;
+     readoptions.verify_checksums = true;
+diff --git a/src/leveldb.h b/src/leveldb.h
+index 79262ed..3388504 100644
+--- src/leveldb.h
++++ src/leveldb.h
+@@ -52,6 +52,63 @@ class CLevelDBBatch
+     }
+ };
+ 
++class CLevelDBIterator
++{
++private:
++    leveldb::Iterator *piter;
++
++public:
++    CLevelDBIterator(leveldb::Iterator *piterIn) : piter(piterIn) {}
++    ~CLevelDBIterator();
++
++    bool Valid();
++
++    void SeekToFirst();
++    void SeekToLast();
++
++    template<typename K> void Seek(const K& key) {
++        CDataStream ssKey(SER_DISK, CLIENT_VERSION);
++        ssKey.reserve(ssKey.GetSerializeSize(key));
++        ssKey << key;
++        leveldb::Slice slKey(&ssKey[0], ssKey.size());
++        piter->Seek(slKey);
++    }
++
++    void Next();
++    void Prev();
++
++    template<typename K> bool GetKey(K& key) {
++        leveldb::Slice slKey = piter->key();
++        try {
++            CDataStream ssKey(slKey.data(), slKey.data() + slKey.size(), SER_DISK, CLIENT_VERSION);
++            ssKey >> key;
++        } catch(std::exception &e) {
++            return false;
++        }
++        return true;
++    }
++
++    unsigned int GetKeySize() {
++        return piter->key().size();
++    }
++
++    template<typename V> bool GetValue(V& value) {
++        leveldb::Slice slValue = piter->value();
++        try {
++            CDataStream ssValue(slValue.data(), slValue.data() + slValue.size(), SER_DISK, CLIENT_VERSION);
++            ssValue >> value;
++        } catch(std::exception &e) {
++            return false;
++        }
++        return true;
++    }
++
++    unsigned int GetValueSize() {
++        return piter->value().size();
++    }
++
++};
++
+ class CLevelDB
+ {
+ private:
+@@ -144,9 +201,8 @@ class CLevelDB
+         return WriteBatch(batch, true);
+     }
+ 
+-    // not exactly clean encapsulation, but it's easiest for now
+-    leveldb::Iterator *NewIterator() {
+-        return pdb->NewIterator(iteroptions);
++    CLevelDBIterator *NewIterator() {
++        return new CLevelDBIterator(pdb->NewIterator(iteroptions));
+     }
+ };
+ 
+diff --git a/src/rpcrawtransaction.cpp b/src/rpcrawtransaction.cpp
+index f08688d..f7b88a1 100644
+--- src/rpcrawtransaction.cpp
++++ src/rpcrawtransaction.cpp
+@@ -131,6 +131,66 @@ void TxToJSON(const CTransaction& tx, const uint256 hashBlock, Object& entry)
+     }
+ }
+ 
++Value searchrawtransactions(const Array &params, bool fHelp)
++{
++    if (fHelp || params.size() < 1 || params.size() > 4)
++        throw runtime_error(
++            "searchrawtransactions <address> [verbose=1] [skip=0] [count=100]\n");
++
++    if (!fAddrIndex)
++        throw JSONRPCError(RPC_MISC_ERROR, "Address index not enabled");
++
++    CBitcoinAddress address(params[0].get_str());
++    if (!address.IsValid())
++        throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid Bitcoin address");
++    CTxDestination dest = address.Get();
++
++    std::set<CExtDiskTxPos> setpos;
++    if (!FindTransactionsByDestination(dest, setpos))
++        throw JSONRPCError(RPC_DATABASE_ERROR, "Cannot search for address");
++
++    int nSkip = 0;
++    int nCount = 100;
++    bool fVerbose = true;
++    if (params.size() > 1)
++        fVerbose = (params[1].get_int() != 0);
++    if (params.size() > 2)
++        nSkip = params[2].get_int();
++    if (params.size() > 3)
++        nCount = params[3].get_int();
++
++    if (nSkip < 0)
++        nSkip += setpos.size();
++    if (nSkip < 0)
++        nSkip = 0;
++    if (nCount < 0)
++        nCount = 0;
++
++    std::set<CExtDiskTxPos>::const_iterator it = setpos.begin();
++    while (it != setpos.end() && nSkip--) it++;
++
++    Array result;
++    while (it != setpos.end() && nCount--) {
++        CTransaction tx;
++        uint256 hashBlock;
++        if (!ReadTransaction(tx, *it, hashBlock))
++            throw JSONRPCError(RPC_DESERIALIZATION_ERROR, "Cannot read transaction from disk");
++        CDataStream ssTx(SER_NETWORK, PROTOCOL_VERSION);
++        ssTx << tx;
++        string strHex = HexStr(ssTx.begin(), ssTx.end());
++        if (fVerbose) {
++            Object object;
++            TxToJSON(tx, hashBlock, object);
++            object.push_back(Pair("hex", strHex));
++            result.push_back(object);
++        } else {
++            result.push_back(strHex);
++        }
++        it++;
++    }
++    return result;
++}
++
+ Value getrawtransaction(const Array& params, bool fHelp)
+ {
+     if (fHelp || params.size() < 1 || params.size() > 2)
+diff --git a/src/txdb.cpp b/src/txdb.cpp
+index 34836ea..7b8b3a5 100644
+--- src/txdb.cpp
++++ src/txdb.cpp
+@@ -67,6 +67,10 @@ bool CCoinsViewDB::BatchWrite(const std::map<uint256, CCoins> &mapCoins, CBlockI
+ }
+ 
+ CBlockTreeDB::CBlockTreeDB(size_t nCacheSize, bool fMemory, bool fWipe) : CLevelDB(GetDataDir() / "blocks" / "index", nCacheSize, fMemory, fWipe) {
++    if (!Read('S', salt)) {
++        salt = GetRandHash();
++        Write('S', salt);
++    }
+ }
+ 
+ bool CBlockTreeDB::WriteBlockIndex(const CDiskBlockIndex& blockindex)
+@@ -113,8 +117,8 @@ bool CBlockTreeDB::ReadLastBlockFile(int &nFile) {
+ }
+ 
+ bool CCoinsViewDB::GetStats(CCoinsStats &stats) {
+-    leveldb::Iterator *pcursor = db.NewIterator();
+-    pcursor->SeekToFirst();
++    CLevelDBIterator *pcursor = db.NewIterator();
++    pcursor->Seek('c');
+ 
+     CHashWriter ss(SER_GETHASH, PROTOCOL_VERSION);
+     stats.hashBlock = GetBestBlock()->GetBlockHash();
+@@ -122,22 +126,10 @@ bool CCoinsViewDB::GetStats(CCoinsStats &stats) {
+     int64 nTotalAmount = 0;
+     while (pcursor->Valid()) {
+         boost::this_thread::interruption_point();
+-        try {
+-            leveldb::Slice slKey = pcursor->key();
+-            CDataStream ssKey(slKey.data(), slKey.data()+slKey.size(), SER_DISK, CLIENT_VERSION);
+-            char chType;
+-            ssKey >> chType;
+-            if (chType == 'c') {
+-                leveldb::Slice slValue = pcursor->value();
+-                CDataStream ssValue(slValue.data(), slValue.data()+slValue.size(), SER_DISK, CLIENT_VERSION);
+-                CCoins coins;
+-                ssValue >> coins;
+-                uint256 txhash;
+-                ssKey >> txhash;
+-                ss << txhash;
+-                ss << VARINT(coins.nVersion);
+-                ss << (coins.fCoinBase ? 'c' : 'n'); 
+-                ss << VARINT(coins.nHeight);
++        std::pair<char, uint256> key;
++        CCoins coins;
++        if (pcursor->GetKey(key) && key.first == 'c') {
++            if (pcursor->GetValue(coins)) {
+                 stats.nTransactions++;
+                 for (unsigned int i=0; i<coins.vout.size(); i++) {
+                     const CTxOut &out = coins.vout[i];
+@@ -148,13 +140,15 @@ bool CCoinsViewDB::GetStats(CCoinsStats &stats) {
+                         nTotalAmount += out.nValue;
+                     }
+                 }
+-                stats.nSerializedSize += 32 + slValue.size();
++                stats.nSerializedSize += 32 + pcursor->GetKeySize();
+                 ss << VARINT(0);
++            } else {
++                return error("CCoinsViewDB::GetStats() : unable to read value");
+             }
+-            pcursor->Next();
+-        } catch (std::exception &e) {
+-            return error("%s() : deserialize error", __PRETTY_FUNCTION__);
++        } else {
++            break;
+         }
++        pcursor->Next();
+     }
+     delete pcursor;
+     stats.nHeight = GetBestBlock()->nHeight;
+@@ -174,6 +168,40 @@ bool CBlockTreeDB::WriteTxIndex(const std::vector<std::pair<uint256, CDiskTxPos>
+     return WriteBatch(batch);
+ }
+ 
++bool CBlockTreeDB::ReadAddrIndex(uint160 addrid, std::vector<CExtDiskTxPos> &list) {
++    CLevelDBIterator *iter = NewIterator();
++    uint64 lookupid;
++    {
++        CHashWriter ss(SER_GETHASH, 0);
++        ss << salt;
++        ss << addrid;
++        lookupid = ss.GetHash().Get64(0);
++    }
++    iter->Seek(make_pair('a', lookupid));
++    while (iter->Valid()) {
++        std::pair<std::pair<char, uint64>, CExtDiskTxPos> key;
++        if (iter->GetKey(key) && key.first.first == 'a' && key.first.second == lookupid) {
++            list.push_back(key.second);
++        } else {
++            break;
++        }
++        iter->Next();
++    }
++    return true;
++}
++
++bool CBlockTreeDB::AddAddrIndex(const std::vector<std::pair<uint160, CExtDiskTxPos> > &list) {
++    unsigned char foo[0];
++    CLevelDBBatch batch;
++    for (std::vector<std::pair<uint160, CExtDiskTxPos> >::const_iterator it=list.begin(); it!=list.end(); it++) {
++        CHashWriter ss(SER_GETHASH, 0);
++        ss << salt;
++        ss << it->first;
++        batch.Write(make_pair(make_pair('a', ss.GetHash().Get64(0)), it->second), FLATDATA(foo));
++    }
++    return WriteBatch(batch);
++}
++
+ bool CBlockTreeDB::WriteFlag(const std::string &name, bool fValue) {
+     return Write(std::make_pair('F', name), fValue ? '1' : '0');
+ }
+@@ -188,26 +216,17 @@ bool CBlockTreeDB::ReadFlag(const std::string &name, bool &fValue) {
+ 
+ bool CBlockTreeDB::LoadBlockIndexGuts()
+ {
+-    leveldb::Iterator *pcursor = NewIterator();
++    CLevelDBIterator *pcursor = NewIterator();
+ 
+-    CDataStream ssKeySet(SER_DISK, CLIENT_VERSION);
+-    ssKeySet << make_pair('b', uint256(0));
+-    pcursor->Seek(ssKeySet.str());
++    pcursor->Seek(make_pair('b', uint256(0)));
+ 
+     // Load mapBlockIndex
+     while (pcursor->Valid()) {
+         boost::this_thread::interruption_point();
+-        try {
+-            leveldb::Slice slKey = pcursor->key();
+-            CDataStream ssKey(slKey.data(), slKey.data()+slKey.size(), SER_DISK, CLIENT_VERSION);
+-            char chType;
+-            ssKey >> chType;
+-            if (chType == 'b') {
+-                leveldb::Slice slValue = pcursor->value();
+-                CDataStream ssValue(slValue.data(), slValue.data()+slValue.size(), SER_DISK, CLIENT_VERSION);
+-                CDiskBlockIndex diskindex;
+-                ssValue >> diskindex;
+-
++        std::pair<char, uint256> key;
++        if (pcursor->GetKey(key) && key.first == 'b') {
++            CDiskBlockIndex diskindex;
++            if (pcursor->GetValue(diskindex)) {
+                 // Construct block index object
+                 CBlockIndex* pindexNew = InsertBlockIndex(diskindex.GetBlockHash());
+                 pindexNew->pprev          = InsertBlockIndex(diskindex.hashPrev);
+@@ -232,10 +251,10 @@ bool CBlockTreeDB::LoadBlockIndexGuts()
+ 
+                 pcursor->Next();
+             } else {
+-                break; // if shutdown requested or finished loading block index
++                return error("LoadBlockIndex() : failed to read value");
+             }
+-        } catch (std::exception &e) {
+-            return error("%s() : deserialize error", __PRETTY_FUNCTION__);
++        } else {
++            break;
+         }
+     }
+     delete pcursor;
+diff --git a/src/txdb.h b/src/txdb.h
+index f59fc5d..7f5c171 100644
+--- src/txdb.h
++++ src/txdb.h
+@@ -31,6 +31,7 @@ class CBlockTreeDB : public CLevelDB
+ public:
+     CBlockTreeDB(size_t nCacheSize, bool fMemory = false, bool fWipe = false);
+ private:
++    uint256 salt;
+     CBlockTreeDB(const CBlockTreeDB&);
+     void operator=(const CBlockTreeDB&);
+ public:
+@@ -45,6 +46,8 @@ class CBlockTreeDB : public CLevelDB
+     bool ReadReindexing(bool &fReindex);
+     bool ReadTxIndex(const uint256 &txid, CDiskTxPos &pos);
+     bool WriteTxIndex(const std::vector<std::pair<uint256, CDiskTxPos> > &list);
++    bool ReadAddrIndex(uint160 addrid, std::vector<CExtDiskTxPos> &list);
++    bool AddAddrIndex(const std::vector<std::pair<uint160, CExtDiskTxPos> > &list);
+     bool WriteFlag(const std::string &name, bool fValue);
+     bool ReadFlag(const std::string &name, bool &fValue);
+     bool LoadBlockIndexGuts();
